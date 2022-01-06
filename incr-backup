@@ -1,0 +1,83 @@
+#!/bin/bash
+
+# script to do incremental backups using tar and rsync
+
+helpFunction()
+{
+  echo ""
+  echo "Usage: $0"
+  echo -e "\t-s source_path"
+  echo -e "\t-t target_path"
+  echo -e "\t-r restore data from Backupstorage"
+  echo -e "\t-d dump data to Backupstorage"
+  echo -e "\t-i [target_path] is required - Show Backupsize"
+  exit 1 # Exit script after printing help
+}
+
+backupInfo()
+{
+  echo "Backup INFO:"
+  echo "Backupsize: $(du -sh $TARGET_PATH)"
+  exit 1
+}
+
+restore()
+{
+  echo "Restore from Backup:"
+  echo "$SOURCE_PATH >>> $TARGET_PATH
+  for f in $SOURCE_PATH*.tgz;
+  do
+    echo "Processing $f file..."
+    tar --extract --listed-incremental=/dev/null --file="$f"  --directory "$TARGET_PATH" 
+  done
+  exit 1
+}
+
+dump()
+{
+  echo "Dump to Backup:"
+  echo "$SOURCE_PATH >>> $TARGET_PATH"
+  echo $BACKUP_PERIOD
+  echo $TODAY
+  LAST_FOLDER="$( ls -rt $TARGET_PATH | tail -n 1 )"
+  if  [[ $LAST_FOLDER < $BACKUP_PERIOD ]] || [[ $LAST_FOLDER == $SNAR_FILE ]];
+  then 
+    echo "Full Backup"
+    mkdir "$TARGET_PATH/$TODAY"
+    tar --create --gzip --listed-incremental="$TARGET_PATH/$TODAY/$SNAR_FILE" --file="$TARGET_PATH/$TODAY/$TODAY$TIME.tgz" "$SOURCE_PATH"
+
+  else
+    echo "Incremental Backup"
+    tar --create --gzip --listed-incremental="$TARGET_PATH/$LAST_FOLDER/$SNAR_FILE" --file="$TARGET_PATH/$LAST_FOLDER/$TODAY$TIME.tgz" "$SOURCE_PATH"
+  fi
+
+  exit 1
+}
+
+MODE="?"
+PERIOD=7
+TIME="$(date '+%H%M%S')"
+TODAY="$(date '+%Y%m%d')"
+BACKUP_PERIOD="$(date '+%Y%m%d' -d ''$PERIOD' days ago')"
+SNAR_FILE="incr_data.snar"
+
+while getopts rds:t:d:i:p: OPT
+do
+  case "${OPT}" in
+    r) MODE=r;;
+    d) MODE=d;;
+    s) SOURCE_PATH=${OPTARG};;
+    t) TARGET_PATH=${OPTARG};;
+    i) TARGET_PATH=${OPTARG}
+       MODE=i;;
+    p) PERIOD=${OPTARG};;
+    ?) helpFunction;; # Print helpFunction in case parameter is non-existent
+  esac
+done
+
+case $MODE in
+  r) restore;;
+  d) dump;;
+  i) backupInfo;;
+  ?) helpFunction;;
+esac
